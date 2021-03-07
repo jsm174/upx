@@ -14,125 +14,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  job-rebuild-and-verify-stubs:
-    name: 'Rebuild stubs'
-    runs-on: ubuntu-16.04
-    steps:
-      - name: 'Install extra packages'
-        run: |
-          uname -a; pwd; id; umask
-          export DEBIAN_FRONTEND=noninteractive
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y libmpfr4:i386 zlib1g:i386
-          cd ..; mkdir -p deps; cd deps
-          wget -q -O - https://github.com/upx/upx-stubtools/releases/download/v20210104/bin-upx-20210104.tar.xz | tar -xJ
-      - name: 'Check out code'
-        uses: actions/checkout@v2
-        with: { submodules: true }
-      - name: 'Rebuild and verify stubs'
-        run: |
-          env C=gcc X=rebuild-stubs TRAVIS_OS_NAME=linux bash ./.github/travis_build.sh
-
-  job-linux-toolchains:
-    needs: [ job-rebuild-and-verify-stubs ]
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: amd64-linux-clang-10, os: ubuntu-20.04, C: clang-10-m64 }
-          - { name: amd64-linux-gcc-10,   os: ubuntu-20.04, C: gcc-10-m64 }
-          - { name: i386-linux-clang-10,  os: ubuntu-20.04, C: clang-10-m32 }
-          - { name: i386-linux-gcc-10,    os: ubuntu-20.04, C: gcc-10-m32 }
-          - { name: amd64-linux-clang-10-sanitize, os: ubuntu-20.04, C: clang-10-m64, B: sanitize }
-          - { name: amd64-linux-gcc-10-sanitize,   os: ubuntu-20.04, C: gcc-10-m64,   B: sanitize }
-
-    steps:
-      - name: 'Install extra packages'
-        run: |
-          uname -a; pwd; id; umask
-          #cat /etc/os-release || true
-          #env
-          if [[ ${{ matrix.os }} =~ ^ubuntu ]]; then
-            export DEBIAN_FRONTEND=noninteractive
-            if [[ ${{ matrix.C }} =~ ^(clang|gcc).*-m32$ ]]; then
-              sudo dpkg --add-architecture i386
-              sudo apt-get update
-              sudo apt-get install --only-upgrade apt
-              sudo apt-get install -y g++-9-multilib g++-10-multilib zlib1g-dev:i386
-            fi
-          fi
-
-      - name: 'Check out code'
-        uses: actions/checkout@v2
-        with: { submodules: true }
-
-      - name: 'Prepare sources'
-        run: |
-          cd ..; mkdir -p deps build/github; cd deps
-          wget -q -O - https://github.com/upx/upx/releases/download/v3.00/ucl-1.03.tar.xz | tar -xJ
-          git clone --depth=1 --single-branch https://github.com/upx/upx-testsuite
-
-      - name: 'Build'
-        run: |
-          export C=${{matrix.C}} B=${{matrix.B}} T=${{matrix.T}} X=${{matrix.X}} TRAVIS_OS_NAME=linux
-          export BUILD_LOCAL_UCL=1
-          bash ./.github/travis_build.sh
-
-      - name: 'Run test suite'
-        run: |
-          export C=${{matrix.C}} B=${{matrix.B}} T=${{matrix.T}} X=${{matrix.X}} TRAVIS_OS_NAME=linux
-          bash ./.github/travis_testsuite_1.sh
-
-  job-windows-cross-toolchains:
-    needs: [ job-rebuild-and-verify-stubs ]
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: amd64-win64-gcc-9, os: ubuntu-20.04, CROSS: x86_64-w64-mingw32, C: gcc-9, T: wine }
-
-    steps:
-      - name: 'Install extra packages'
-        run: |
-          uname -a; pwd; id; umask
-          export DEBIAN_FRONTEND=noninteractive
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y binutils-mingw-w64-x86-64 g++-mingw-w64-x86-64 wine wine64
-
-      - name: 'Check out code'
-        uses: actions/checkout@v2
-        with: { submodules: true }
-
-      - name: 'Prepare sources'
-        run: |
-          cd ..; mkdir -p deps build/github; cd deps
-          wget -q -O - https://github.com/upx/upx/releases/download/v3.00/ucl-1.03.tar.xz | tar -xJ
-          wget -q -O - https://github.com/upx/upx/releases/download/v3.00/zlib-1.2.11.tar.xz | tar -xJ
-          git clone --depth=1 --single-branch https://github.com/upx/upx-testsuite
-
-      - name: 'Build'
-        run: |
-          export C=${{matrix.C}} B=${{matrix.B}} T=${{matrix.T}} X=${{matrix.X}} TRAVIS_OS_NAME=linux
-          export CROSS=${{matrix.CROSS}}
-          export BUILD_LOCAL_UCL=1
-          bash ./.github/travis_build.sh
-
-      - name: 'Run test suite using Wine'
-        run: |
-          export C=${{matrix.C}} B=${{matrix.B}} T=${{matrix.T}} X=${{matrix.X}} TRAVIS_OS_NAME=linux
-          export CROSS=${{matrix.CROSS}}
-          bash ./.github/travis_testsuite_1.sh
-
   job-windows-toolchains:
-    needs: [ job-rebuild-and-verify-stubs ]
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
 
@@ -146,7 +28,6 @@ jobs:
       matrix:
         include:
           - { name: amd64-win64-msvc-14.2, os: windows-2019, C: msvc-14.2-x64, A: x64 }
-          - { name: i386-win32-msvc-14.2,  os: windows-2019, C: msvc-14.2-x86, A: x86 }
 
     steps:
       - name: 'Check out code'
@@ -211,10 +92,19 @@ jobs:
           .\upx.exe -l upx_packed.exe
           .\upx.exe -t upx_packed.exe
           .\upx_packed.exe --version
-
+          
       - name: 'Run test suite'
         shell: cmd
         run: |
           bash ./.github/travis_testsuite_1.sh
 
-# vim:set ts=2 sw=2 et:
+      - name: 'Make artifacts'
+        shell: cmd
+        run: |
+          mkdir tmp
+          copy %H%\build\%C%\%B%\upx\upx_packed.exe tmp\upx.exe
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: upx
+          path: tmp
